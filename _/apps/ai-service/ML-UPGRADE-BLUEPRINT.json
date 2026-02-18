@@ -1,0 +1,558 @@
+{
+  "title": "Passage 414 - ML Service Upgrade Blueprint",
+  "subtitle": "Transform AI Service into Python + FastAPI + Scikit-learn ML Platform",
+  "version": "2.0-ML",
+
+  "overview": {
+    "description": "Complete architecture for upgrading the Node.js rule-based AI service to a production-ready Python ML microservice with real machine learning models",
+    "tech_stack": {
+      "framework": "FastAPI 0.109.0",
+      "ml_library": "Scikit-learn 1.4.0",
+      "data_processing": ["Pandas 2.1.4", "NumPy 1.26.3"],
+      "model_persistence": "Joblib 1.3.2",
+      "database": "PostgreSQL (psycopg2-binary 2.9.9)",
+      "cache_queue": "Redis 5.0.1",
+      "web_server": "Uvicorn (ASGI)",
+      "deployment": "Docker + docker-compose"
+    },
+    "python_version": "3.11+",
+    "deployment_strategy": "Blue-green deployment (run alongside Node.js service, gradually migrate traffic)"
+  },
+
+  "project_structure": {
+    "root": "/apps/ai-service-ml",
+    "directories": {
+      "api": "FastAPI route handlers and endpoints",
+      "ml": "Machine learning model classes",
+      "services": "Feature engineering and business logic",
+      "training": "Model training pipelines and scripts",
+      "ml_models": "Persisted trained models (Joblib files)",
+      "tests": "Unit and integration tests"
+    },
+    "key_files": {
+      "main.py": "FastAPI application entrypoint",
+      "config.py": "Pydantic settings configuration",
+      "database.py": "PostgreSQL connection and query utilities",
+      "requirements.txt": "Python dependencies",
+      "Dockerfile": "Container image definition",
+      "docker-compose.yml": "Multi-container orchestration",
+      "pyproject.toml": "Python project metadata (optional)"
+    }
+  },
+
+  "ml_models": {
+    "user_clustering": {
+      "algorithm": "KMeans (k=5 clusters)",
+      "library": "sklearn.cluster.KMeans",
+      "purpose": "Segment users into behavior-based clusters",
+      "input_features": [
+        "total_time_spent (seconds on platform)",
+        "total_product_views (count)",
+        "total_purchases (count)",
+        "avg_order_value (IRR)",
+        "category_diversity (unique categories browsed)",
+        "cart_abandonment_rate (0-1)"
+      ],
+      "output": "Cluster label (0-4)",
+      "cluster_descriptions": {
+        "0": "Window Shoppers - High browsing, minimal purchases",
+        "1": "Casual Buyers - Moderate engagement, occasional purchases",
+        "2": "VIP Customers - High value, frequent purchases",
+        "3": "New Users - Limited history, exploratory behavior",
+        "4": "Bargain Hunters - High cart abandonment, price-sensitive"
+      },
+      "training": {
+        "type": "Unsupervised learning",
+        "data_requirement": "Minimum 100 users with 5+ events each",
+        "preprocessing": "StandardScaler normalization",
+        "hyperparameters": {
+          "n_clusters": 5,
+          "max_iter": 300,
+          "n_init": 10,
+          "random_state": 42
+        },
+        "evaluation_metric": "Silhouette score (target > 0.3)"
+      },
+      "inference": {
+        "input": "Dictionary of user features",
+        "output": "Integer cluster label",
+        "latency": "< 10ms"
+      },
+      "file_paths": {
+        "model": "ml_models/user_clustering.joblib",
+        "scaler": "ml_models/user_clustering_scaler.joblib",
+        "code": "ml/user_clustering.py"
+      }
+    },
+
+    "purchase_probability": {
+      "algorithm": "Logistic Regression",
+      "library": "sklearn.linear_model.LogisticRegression",
+      "purpose": "Predict probability of purchase in next session",
+      "input_features": [
+        "total_product_views",
+        "total_purchases",
+        "avg_order_value",
+        "category_diversity",
+        "cart_abandonment_rate",
+        "peak_activity_hour (0-23)"
+      ],
+      "output": "Probability score (0.0 to 1.0)",
+      "training": {
+        "type": "Supervised binary classification",
+        "target": "has_made_purchase (1=yes, 0=no)",
+        "data_requirement": "Minimum 200 users with balanced classes",
+        "preprocessing": "StandardScaler normalization",
+        "class_imbalance_handling": "class_weight='balanced'",
+        "hyperparameters": {
+          "max_iter": 1000,
+          "random_state": 42,
+          "solver": "lbfgs"
+        },
+        "evaluation_metrics": {
+          "primary": "ROC AUC (target > 0.65)",
+          "secondary": "Precision at 50% recall"
+        },
+        "train_test_split": "80/20 stratified split"
+      },
+      "inference": {
+        "input": "Dictionary of user features",
+        "output": "Float probability (0-1)",
+        "latency": "< 10ms"
+      },
+      "use_cases": [
+        "Trigger personalized discount offers for high-probability users",
+        "Prioritize retargeting campaigns",
+        "Optimize email send timing",
+        "Dynamic homepage personalization"
+      ],
+      "file_paths": {
+        "model": "ml_models/purchase_probability.joblib",
+        "scaler": "ml_models/purchase_probability_scaler.joblib",
+        "code": "ml/purchase_probability.py"
+      }
+    },
+
+    "collaborative_filtering": {
+      "algorithm": "Item-based collaborative filtering with cosine similarity",
+      "library": "sklearn.metrics.pairwise.cosine_similarity",
+      "purpose": "Generate personalized product recommendations",
+      "approach": {
+        "step_1": "Build user-item interaction matrix from analytics_events",
+        "step_2": "Assign interaction weights: productView=1, addToCart=3, purchase=5",
+        "step_3": "Compute item-item cosine similarity matrix",
+        "step_4": "For target user, find products similar to their liked items",
+        "step_5": "Rank by similarity score, filter already-interacted items",
+        "step_6": "Cold start: Return popular products for new users"
+      },
+      "output": "List of (product_id, similarity_score) tuples",
+      "training": {
+        "type": "Unsupervised similarity computation",
+        "data_requirement": "Minimum 500 user-product interactions",
+        "matrix_format": "Dense matrix (users × products)",
+        "evaluation_metrics": {
+          "coverage": "% of products that can be recommended",
+          "sparsity": "% of empty cells in user-item matrix"
+        }
+      },
+      "inference": {
+        "input": "user_id, n (number of recommendations)",
+        "output": "List of product dicts with scores",
+        "latency": "< 50ms",
+        "fallback": "Popular products (by view count)"
+      },
+      "optimization": {
+        "sparse_matrix": "Use scipy.sparse.csr_matrix for large datasets",
+        "caching": "Cache similarity matrix in memory",
+        "batch_recommendations": "Pre-compute for active users"
+      },
+      "file_paths": {
+        "model": "ml_models/collaborative_filtering.joblib",
+        "code": "ml/collaborative_filtering.py"
+      }
+    },
+
+    "dynamic_pricing": {
+      "algorithm": "Random Forest Regression",
+      "library": "sklearn.ensemble.RandomForestRegressor",
+      "purpose": "Suggest optimal product pricing",
+      "input_features": [
+        "current_price (base_price_irr)",
+        "view_count (last 30 days)",
+        "conversion_rate (purchases / views)",
+        "competitor_avg_price (same category)",
+        "stock_level (current inventory)"
+      ],
+      "output": {
+        "suggested_price": "Predicted optimal price (IRR)",
+        "min_price": "suggested_price * 0.9",
+        "max_price": "suggested_price * 1.1",
+        "confidence_interval": "Price range recommendation"
+      },
+      "training": {
+        "type": "Supervised regression",
+        "target": "optimal_price (derived from conversion performance)",
+        "target_calculation": "current_price * conversion_adjustment_factor",
+        "data_requirement": "Minimum 100 products with analytics",
+        "preprocessing": "StandardScaler normalization",
+        "hyperparameters": {
+          "n_estimators": 100,
+          "max_depth": 10,
+          "random_state": 42,
+          "n_jobs": -1
+        },
+        "evaluation_metrics": {
+          "mae": "Mean Absolute Error (IRR)",
+          "r2_score": "Coefficient of determination (target > 0.5)",
+          "feature_importance": "Ranking of feature contributions"
+        }
+      },
+      "inference": {
+        "input": "Dictionary of product features",
+        "output": "Price suggestion dict",
+        "latency": "< 20ms"
+      },
+      "business_rules": {
+        "min_price_threshold": "Never suggest < 50% of current price",
+        "max_price_threshold": "Never suggest > 150% of current price",
+        "stock_consideration": "Higher price if low stock"
+      },
+      "file_paths": {
+        "model": "ml_models/dynamic_pricing.joblib",
+        "scaler": "ml_models/dynamic_pricing_scaler.joblib",
+        "code": "ml/dynamic_pricing.py"
+      }
+    },
+
+    "fraud_detection": {
+      "algorithm": "Isolation Forest (anomaly detection)",
+      "library": "sklearn.ensemble.IsolationForest",
+      "purpose": "Detect fraudulent orders and suspicious behavior",
+      "input_features": [
+        "order_value (total_amount)",
+        "order_value_deviation (from user's historical average)",
+        "time_since_last_order (hours)",
+        "items_count (number of products)",
+        "order_velocity (orders in last 24h)"
+      ],
+      "output": {
+        "risk_score": "0.0 (safe) to 1.0 (risky)",
+        "is_flagged": "Boolean anomaly detection result",
+        "risk_level": "low / medium / high",
+        "anomaly_score": "Raw Isolation Forest score"
+      },
+      "training": {
+        "type": "Unsupervised anomaly detection",
+        "data": "Historical completed orders (assumed mostly legitimate)",
+        "data_requirement": "Minimum 500 completed orders",
+        "contamination": 0.1,
+        "hyperparameters": {
+          "n_estimators": 100,
+          "random_state": 42,
+          "max_samples": "auto"
+        },
+        "evaluation": "Manual review of flagged orders"
+      },
+      "inference": {
+        "input": "Order feature dictionary",
+        "output": "Fraud risk assessment dict",
+        "latency": "< 15ms"
+      },
+      "risk_thresholds": {
+        "high": "risk_score > 0.8 → Block transaction",
+        "medium": "risk_score > 0.6 → Manual review required",
+        "low": "risk_score <= 0.6 → Auto-approve"
+      },
+      "use_cases": [
+        "Real-time fraud check during checkout",
+        "Post-purchase risk assessment",
+        "Identify account takeover attempts",
+        "Detect unusual purchasing patterns"
+      ],
+      "file_paths": {
+        "model": "ml_models/fraud_detection.joblib",
+        "scaler": "ml_models/fraud_detection_scaler.joblib",
+        "code": "ml/fraud_detection.py"
+      }
+    }
+  },
+
+  "api_endpoints": {
+    "health": {
+      "method": "GET",
+      "path": "/health",
+      "auth": false,
+      "description": "Service health check",
+      "response": {
+        "status": "healthy",
+        "service": "ml-service",
+        "models_loaded": true,
+        "timestamp": "ISO 8601"
+      }
+    },
+
+    "purchase_probability": {
+      "method": "GET",
+      "path": "/ml/purchase-probability/{user_id}",
+      "auth": "Required (X-API-Key)",
+      "description": "Predict purchase probability for user",
+      "response_example": {
+        "user_id": 123,
+        "purchase_probability": 0.73,
+        "cluster": 2,
+        "cluster_description": "VIP Customers - High value, frequent purchases",
+        "last_updated": "2024-02-17T10:30:00Z"
+      }
+    },
+
+    "recommendations": {
+      "method": "GET",
+      "path": "/ml/recommendations/{user_id}",
+      "query_params": {
+        "n": "Number of recommendations (default: 5)"
+      },
+      "auth": "Required",
+      "description": "Get personalized product recommendations",
+      "response_example": {
+        "user_id": 123,
+        "recommendations": [
+          {
+            "product_id": 456,
+            "score": 0.89,
+            "name": "Product Name",
+            "price": 500000,
+            "shop_name": "Shop Name"
+          }
+        ],
+        "algorithm": "collaborative_filtering",
+        "generated_at": "2024-02-17T10:30:00Z"
+      }
+    },
+
+    "price_suggestion": {
+      "method": "GET",
+      "path": "/ml/price-suggestion/{product_id}",
+      "auth": "Required",
+      "description": "Get dynamic pricing suggestion",
+      "response_example": {
+        "product_id": 789,
+        "current_price": 500000,
+        "suggested_price": 475000,
+        "min_price": 427500,
+        "max_price": 522500,
+        "reasoning": "High views but low conversion - price reduction recommended",
+        "confidence": 0.85
+      }
+    },
+
+    "fraud_check": {
+      "method": "POST",
+      "path": "/ml/fraud-check",
+      "auth": "Required",
+      "body": {
+        "user_id": 123,
+        "total_amount": 5000000,
+        "products": [{ "id": 1, "quantity": 2 }]
+      },
+      "description": "Check order for fraud risk",
+      "response_example": {
+        "risk_score": 0.23,
+        "is_flagged": false,
+        "risk_level": "low",
+        "recommendation": "approve",
+        "features_analyzed": [
+          "order_value",
+          "order_value_deviation",
+          "time_since_last_order",
+          "items_count",
+          "order_velocity"
+        ]
+      }
+    },
+
+    "train_models": {
+      "method": "POST",
+      "path": "/ml/train",
+      "auth": "Required",
+      "description": "Trigger model retraining",
+      "body": {
+        "models": ["all"],
+        "force": false
+      },
+      "response_example": {
+        "status": "training_started",
+        "job_id": "train_20240217_103000",
+        "models": [
+          "clustering",
+          "purchase_prob",
+          "collaborative",
+          "pricing",
+          "fraud"
+        ],
+        "estimated_time": "5 minutes"
+      }
+    },
+
+    "model_status": {
+      "method": "GET",
+      "path": "/ml/models/status",
+      "auth": "Required",
+      "description": "Get trained model metadata",
+      "response_example": {
+        "user_clustering": {
+          "trained_at": "2024-02-17T10:30:00Z",
+          "samples": 1250,
+          "silhouette_score": 0.42,
+          "is_active": true
+        },
+        "purchase_probability": {
+          "trained_at": "2024-02-17T10:32:00Z",
+          "samples": 1250,
+          "roc_auc": 0.78,
+          "is_active": true
+        }
+      }
+    }
+  },
+
+  "database_schema": {
+    "user_ml_profiles": {
+      "purpose": "Store ML-computed user features and predictions",
+      "sql": "CREATE TABLE user_ml_profiles (id SERIAL PRIMARY KEY, user_id INTEGER UNIQUE NOT NULL, cluster_label INTEGER, purchase_probability DECIMAL(5, 4), total_time_spent INTEGER DEFAULT 0, total_product_views INTEGER DEFAULT 0, total_purchases INTEGER DEFAULT 0, avg_order_value DECIMAL(12, 2), last_visit TIMESTAMP, features_updated_at TIMESTAMP DEFAULT NOW(), FOREIGN KEY (user_id) REFERENCES auth_users(id) ON DELETE CASCADE)",
+      "indexes": ["user_id", "cluster_label"]
+    },
+
+    "product_embeddings": {
+      "purpose": "Store product similarity embeddings",
+      "sql": "CREATE TABLE product_embeddings (id SERIAL PRIMARY KEY, product_id INTEGER UNIQUE NOT NULL, embedding BYTEA, popularity_score DECIMAL(5, 2), updated_at TIMESTAMP DEFAULT NOW(), FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE)",
+      "indexes": ["product_id"]
+    },
+
+    "ml_model_metadata": {
+      "purpose": "Track model versions and performance",
+      "sql": "CREATE TABLE ml_model_metadata (id SERIAL PRIMARY KEY, model_name VARCHAR(100) UNIQUE NOT NULL, model_version VARCHAR(50), trained_at TIMESTAMP DEFAULT NOW(), training_samples INTEGER, performance_metrics JSONB, is_active BOOLEAN DEFAULT TRUE)",
+      "indexes": ["model_name"]
+    },
+
+    "fraud_checks": {
+      "purpose": "Log fraud detection results",
+      "sql": "CREATE TABLE fraud_checks (id SERIAL PRIMARY KEY, user_id INTEGER, order_id INTEGER, risk_score DECIMAL(5, 4), is_flagged BOOLEAN, features JSONB, checked_at TIMESTAMP DEFAULT NOW())",
+      "indexes": ["user_id", "order_id", "checked_at"]
+    }
+  },
+
+  "deployment_guide": {
+    "docker_setup": {
+      "dockerfile_content": "FROM python:3.11-slim\\nWORKDIR /app\\nCOPY requirements.txt .\\nRUN pip install --no-cache-dir -r requirements.txt\\nCOPY . .\\nRUN mkdir -p ml_models\\nEXPOSE 4000\\nCMD [\"uvicorn\", \"main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"4000\"]",
+      "build_command": "docker build -t passage414-ml .",
+      "run_command": "docker run -p 4000:4000 --env-file .env passage414-ml"
+    },
+
+    "docker_compose_setup": {
+      "services": {
+        "ml-service": "Main FastAPI application",
+        "redis": "Event queue and caching"
+      },
+      "volumes": {
+        "ml_models": "Persist trained models",
+        "redis-data": "Persist Redis data"
+      },
+      "networks": "passage414-network (shared with core backend)"
+    },
+
+    "environment_variables": {
+      "required": [
+        "DATABASE_URL - PostgreSQL connection string",
+        "API_KEY - Service authentication key"
+      ],
+      "optional": [
+        "REDIS_URL - Redis connection (default: redis://localhost:6379)",
+        "MODEL_DIR - Model storage path (default: ml_models)",
+        "MIN_TRAINING_SAMPLES - Minimum data for training (default: 100)",
+        "PORT - API server port (default: 4000)"
+      ]
+    }
+  },
+
+  "training_pipeline": {
+    "schedule": "Every 7 days at 2 AM or on-demand via API",
+    "steps": [
+      "1. Extract features for all users (requires min 100 samples)",
+      "2. Train KMeans clustering model",
+      "3. Train Logistic Regression purchase probability model",
+      "4. Build user-item matrix and compute collaborative filtering",
+      "5. Train Random Forest pricing model",
+      "6. Train Isolation Forest fraud detection",
+      "7. Save all models with Joblib",
+      "8. Update ml_model_metadata table",
+      "9. Run validation on test set",
+      "10. Activate new models if performance improved, else rollback"
+    ],
+    "validation_criteria": {
+      "clustering": "silhouette_score > 0.3",
+      "purchase_probability": "roc_auc > 0.65",
+      "pricing": "mae < 20% of mean price",
+      "fraud": "At least 5% anomalies detected"
+    },
+    "rollback_policy": "If validation fails, keep previous model version active"
+  },
+
+  "migration_strategy": {
+    "phase_1_parallel_deployment": {
+      "description": "Deploy ML service alongside Node.js service",
+      "steps": [
+        "Deploy Python ML service on port 4001",
+        "Keep existing Node.js service on port 4000",
+        "Route 10% traffic to ML service for testing",
+        "Monitor performance and accuracy"
+      ],
+      "rollback": "Route all traffic back to Node.js service"
+    },
+
+    "phase_2_gradual_migration": {
+      "description": "Increase ML service traffic percentage",
+      "steps": [
+        "Route 25% traffic to ML service",
+        "Route 50% traffic after 1 week",
+        "Route 75% traffic after 2 weeks",
+        "Route 100% traffic after 3 weeks"
+      ],
+      "monitoring": "Compare recommendation quality, latency, error rates"
+    },
+
+    "phase_3_decommission_nodejs": {
+      "description": "Remove Node.js service after full migration",
+      "steps": [
+        "Ensure ML service handles 100% traffic successfully",
+        "Keep Node.js service as backup for 2 weeks",
+        "Decommission Node.js service",
+        "Update documentation"
+      ]
+    }
+  },
+
+  "monitoring_and_observability": {
+    "metrics": [
+      "model_inference_latency_ms (p50, p95, p99)",
+      "prediction_accuracy_over_time",
+      "model_drift_score",
+      "feature_distribution_changes",
+      "api_request_rate",
+      "api_error_rate"
+    ],
+
+    "logging": {
+      "prediction_logging": "Log all predictions with input features for analysis",
+      "training_logging": "Log training runs with metrics and timestamps",
+      "error_logging": "Track exceptions and stack traces",
+      "model_versioning": "Maintain version history in ml_model_metadata table"
+    },
+
+    "alerting": {
+      "performance_degradation": "Alert if ROC AUC drops > 10%",
+      "training_failure": "Alert on training errors",
+      "high_fraud_rate": "Alert if >20% orders flagged",
+      "api_downtime": "Alert on health check failures"
+    }
+  }
+}
